@@ -1,0 +1,40 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #172033;
+  background: #eef2f7;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.container { max-width: 760px; margin: 32px auto; padding: 0 16px 48px; }
+h1 { margin-bottom: 20px; }
+.card { background: white; border: 1px solid #dce3ed; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+.card h2 { margin-top: 0; }
+summary { cursor: pointer; font-weight: 700; margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+label { display: block; margin: 12px 0; font-weight: 600; }
+input[type="text"], input[type="password"], input[type="file"] {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid #b6c1d1;
+  border-radius: 8px;
+  background: white;
+  font: inherit;
+}
+.check { display: flex; align-items: center; gap: 8px; }
+.switch-row { justify-content: space-between; }
+.switch-row input { width: 44px; height: 24px; accent-color: #1a73e8; }
+.drop-zone { min-height: 150px; display: grid; place-items: center; border: 2px dashed #9aabc1; border-radius: 12px; background: #f8fafc; }
+.drop-zone.dragover { border-color: #1a73e8; background: #edf4ff; }
+#iconPreview { width: 128px; height: 128px; object-fit: cover; border-radius: 22px; box-shadow: 0 4px 14px #0002; }
+.hint { color: #59677a; }
+.error { min-height: 20px; color: #b42318; }
+#submitButton { width: 100%; border: 0; border-radius: 10px; padding: 14px; background: #1a73e8; color: white; font-weight: 700; font-size: 16px; cursor: pointer; }
+#submitButton:disabled { opacity: 0.55; cursor: wait; }
+.install-button { margin: 0 0 16px; border: 1px solid #1a73e8; border-radius: 8px; padding: 10px 14px; background: white; color: #1a73e8; font: inherit; font-weight: 700; cursor: pointer; }
+.status { margin-top: 14px; padding: 12px; border-radius: 8px; }
+.status.success { background: #eaf8ef; color: #146c43; }
+.status.error { background: #fff0f0; color: #b42318; }
+@media (max-width: 600px) { .grid { grid-template-columns: 1fr; } .container { margin-top: 16px; } }

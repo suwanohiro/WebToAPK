@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1a73e8">
+  <title>WebToAPK Builder</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>WebToAPK Builder</h1>
+    <button id="installButton" class="install-button" type="button" hidden>アプリをインストール</button>
+
+    <details class="card" open>
+      <summary>GitHub 接続設定</summary>
+      <div class="grid">
+        <label>Owner
+          <input id="owner" autocomplete="username" placeholder="suwanohiro">
+        </label>
+        <label>Repo
+          <input id="repo" autocomplete="off" placeholder="WebToAPK">
+        </label>
+        <label>Branch
+          <input id="branch" value="main">
+        </label>
+        <label>Personal Access Token
+          <input id="token" type="password" autocomplete="current-password">
+        </label>
+      </div>
+      <label class="check">
+        <input id="saveCredentials" type="checkbox">
+        ブラウザ（localStorage）に認証情報を保存する
+      </label>
+    </details>
+
+    <section class="card">
+      <h2>アプリ設定</h2>
+      <label>アプリ名
+        <input id="appName" value="WebApp" required>
+      </label>
+      <label>パッケージ名
+        <input id="packageName" value="com.example.webviewapp" list="packageHistory" required>
+        <datalist id="packageHistory"></datalist>
+      </label>
+      <p id="packageError" class="error" aria-live="polite"></p>
+
+      <label>アプリアイコン
+        <input id="iconFile" type="file" accept="image/*">
+      </label>
+      <div id="dropZone" class="drop-zone">
+        <p>画像をここにドラッグ＆ドロップ、または上から選択</p>
+        <img id="iconPreview" alt="アイコンプレビュー" hidden>
+      </div>
+      <p id="iconSize" class="hint">既定アイコンを使用します</p>
+
+      <label>接続先 URL
+        <input id="targetUrl" type="text" value="https://example.com" required>
+      </label>
+      <p id="urlError" class="error" aria-live="polite"></p>
+
+      <label class="check switch-row">
+        <span>フルスクリーン起動</span>
+        <input id="fullscreen" type="checkbox" checked>
+      </label>
+    </section>
+
+    <button id="submitButton" type="button">APKビルドを開始する</button>
+    <div id="status" class="status" aria-live="polite"></div>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

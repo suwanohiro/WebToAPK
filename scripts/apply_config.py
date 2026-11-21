@@ -257,8 +257,8 @@ def main() -> int:
         count=1,
     )
     gradle_text, fullscreen_count = re.subn(
-        r'(?m)^(\s*buildConfigField\("boolean", "IS_FULLSCREEN", )(?:true|false)(\))',
-        lambda m: m.group(1) + ("true" if fullscreen else "false") + m.group(2),
+        r'(?m)^(\s*buildConfigField\("boolean", "IS_FULLSCREEN", )"(?:true|false)"(\))',
+        lambda m: m.group(1) + '"' + ("true" if fullscreen else "false") + '"' + m.group(2),
         gradle_text,
         count=1,
     )

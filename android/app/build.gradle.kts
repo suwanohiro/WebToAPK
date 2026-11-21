@@ -16,7 +16,7 @@ android {
 
         resValue("string", "app_name", "WebApp")
         buildConfigField("String", "TARGET_URL", "\"https://example.com\"")
-        buildConfigField("boolean", "IS_FULLSCREEN", true)
+        buildConfigField("boolean", "IS_FULLSCREEN", "true")
     }
 
     buildTypes {

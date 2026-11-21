@@ -2,6 +2,9 @@ const STORAGE_KEY = "webtoapk.credentials";
 const HISTORY_KEY = "webtoapk.packageHistory";
 let iconBase64 = "";
 let deferredInstallPrompt = null;
+let customIconSelected = false;
+let faviconPreviewVersion = 0;
+let faviconDebounceTimer;
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,20 +72,140 @@ function suggestPackageName() {
   }
 }
 
-async function processIcon(file) {
-  if (!file || !file.type.startsWith("image/")) {
-    iconBase64 = "";
+async function findFaviconUrls(pageUrl) {
+  const parsedPageUrl = new URL(pageUrl);
+  const fallbackUrls = [
+    new URL("/favicon.ico", parsedPageUrl.origin).href,
+    new URL("/favicon.png", parsedPageUrl.origin).href,
+    new URL("/apple-touch-icon.png", parsedPageUrl.origin).href
+  ];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    const response = await fetch(pageUrl, {
+      credentials: "omit",
+      signal: controller.signal
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (!response.ok || !/html/i.test(contentType) || contentLength > 512000 || !response.body) {
+      return fallbackUrls;
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > 512000) {
+        await reader.cancel();
+        return fallbackUrls;
+      }
+      chunks.push(value);
+    }
+
+    const html = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      html.set(chunk, offset);
+      offset += chunk.length;
+    }
+    const parsedHtml = new DOMParser().parseFromString(new TextDecoder().decode(html), "text/html");
+    const iconLinks = Array.from(parsedHtml.querySelectorAll("link[rel][href]"))
+      .filter((link) => {
+        const rel = link.rel.toLowerCase().split(/\s+/);
+        return rel.some((value) => ["icon", "mask-icon", "apple-touch-icon"].includes(value));
+      })
+      .sort((left, right) => {
+        const score = (link) => {
+          const match = (link.sizes?.value || "").match(/(\d+)x(\d+)/i);
+          return match ? Number(match[1]) * Number(match[2]) : 0;
+        };
+        return score(right) - score(left);
+      })
+      .map((link) => new URL(link.getAttribute("href"), response.url || pageUrl).href)
+      .filter((url) => ["http:", "https:"].includes(new URL(url).protocol));
+
+    return [...new Set([...iconLinks, ...fallbackUrls])];
+  } catch (error) {
+    console.info("Could not inspect page icon metadata; trying standard favicon paths.");
+    return fallbackUrls;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function canLoadImage(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = url;
+  });
+}
+
+async function previewFavicon() {
+  if (customIconSelected) return;
+  const requestVersion = ++faviconPreviewVersion;
+  let pageUrl = $("targetUrl").value.trim();
+  if (!pageUrl) {
     $("iconPreview").hidden = true;
-    $("iconSize").textContent = "既定アイコンを使用します";
+    $("iconSize").textContent = "URLを入力するとファビコンをプレビューします";
+    return;
+  }
+  if (!/^https?:\/\//i.test(pageUrl)) pageUrl = `https://${pageUrl}`;
+
+  let candidates;
+  try {
+    new URL(pageUrl);
+    candidates = await findFaviconUrls(pageUrl);
+  } catch {
+    $("iconPreview").hidden = true;
+    $("iconSize").textContent = "有効なURLを入力するとファビコンをプレビューします";
+    return;
+  }
+  if (requestVersion !== faviconPreviewVersion || customIconSelected) return;
+
+  for (const url of candidates) {
+    if (!await canLoadImage(url)) continue;
+    if (requestVersion !== faviconPreviewVersion || customIconSelected) return;
+    $("iconPreview").src = url;
+    $("iconPreview").alt = "URL先のファビコン";
+    $("iconPreview").hidden = false;
+    $("iconSize").textContent = "URL先のファビコン（APKビルド時に自動取得）";
+    $("iconSize").style.color = "";
     return;
   }
 
+  $("iconPreview").hidden = true;
+  $("iconSize").textContent = "ファビコンをプレビューできませんでした。ビルド時に取得を試みます";
+}
+
+async function processIcon(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    iconBase64 = "";
+    customIconSelected = false;
+    await previewFavicon();
+    return;
+  }
+
+  customIconSelected = true;
+  iconBase64 = "";
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("画像を処理できませんでした");
+  }
+
   let dataUrl = "";
+  let selectedFormat = "";
   let size = 256;
-  for (const candidateSize of [256, 192, 128]) {
+  for (const candidateSize of [256, 192, 128, 96, 64]) {
     size = candidateSize;
     canvas.width = size;
     canvas.height = size;
@@ -91,27 +214,33 @@ async function processIcon(file) {
     const height = bitmap.height * scale;
     context.drawImage(bitmap, (size - width) / 2, (size - height) / 2, width, height);
 
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((result) => result ? resolve(result) : reject(new Error("PNG画像を生成できませんでした")), "image/png");
-    });
-    dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    iconBase64 = dataUrl.split(",", 2)[1];
+    for (const quality of [0.86, 0.72, 0.58]) {
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((result) => result ? resolve(result) : reject(new Error("画像を圧縮できませんでした")), "image/webp", quality);
+      });
+      dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      iconBase64 = dataUrl.split(",", 2)[1];
+      selectedFormat = blob.type === "image/webp" ? "WebP" : "PNG";
+      if (iconBase64.length <= 45000 || blob.type !== "image/webp") break;
+    }
+
     if (iconBase64.length <= 45000) break;
   }
 
   $("iconPreview").src = dataUrl;
+  $("iconPreview").alt = "選択したアプリアイコン";
   $("iconPreview").hidden = false;
   const kb = Math.round(iconBase64.length * 0.75 / 1024);
   const withinLimit = iconBase64.length <= 45000;
-  $("iconSize").textContent = `${size}×${size}px / ${kb} KB / Base64 ${iconBase64.length}文字${withinLimit ? "" : "（上限超過）"}`;
+  $("iconSize").textContent = `${size}×${size}px / ${selectedFormat} / ${kb} KB / Base64 ${iconBase64.length}文字${withinLimit ? "" : "（上限超過）"}`;
   $("iconSize").style.color = withinLimit ? "" : "#b42318";
   bitmap.close();
-  if (!withinLimit) throw new Error("アイコンをより小さい画像にしてから選択してください");
+  if (!withinLimit) throw new Error("この画像は送信上限に収まりませんでした");
 }
 
 function setStatus(message, type = "") {
@@ -203,8 +332,20 @@ $("packageName").addEventListener("input", () => {
   $("packageName").dataset.edited = "true";
   validatePackage();
 });
-$("targetUrl").addEventListener("blur", normalizeUrl);
-$("iconFile").addEventListener("change", (event) => processIcon(event.target.files[0]).catch((error) => setStatus(error.message, "error")));
+$("targetUrl").addEventListener("input", () => {
+  clearTimeout(faviconDebounceTimer);
+  faviconDebounceTimer = setTimeout(previewFavicon, 400);
+});
+$("targetUrl").addEventListener("blur", () => {
+  normalizeUrl();
+  previewFavicon();
+});
+$("iconFile").addEventListener("change", (event) => processIcon(event.target.files[0]).catch((error) => {
+  customIconSelected = false;
+  iconBase64 = "";
+  setStatus(error.message, "error");
+  previewFavicon();
+}));
 $("dropZone").addEventListener("dragover", (event) => {
   event.preventDefault();
   $("dropZone").classList.add("dragover");
@@ -213,7 +354,12 @@ $("dropZone").addEventListener("dragleave", () => $("dropZone").classList.remove
 $("dropZone").addEventListener("drop", (event) => {
   event.preventDefault();
   $("dropZone").classList.remove("dragover");
-  processIcon(event.dataTransfer.files[0]).catch((error) => setStatus(error.message, "error"));
+  processIcon(event.dataTransfer.files[0]).catch((error) => {
+    customIconSelected = false;
+    iconBase64 = "";
+    setStatus(error.message, "error");
+    previewFavicon();
+  });
 });
 $("submitButton").addEventListener("click", dispatchBuild);
 $("installButton").addEventListener("click", async () => {
@@ -241,3 +387,4 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
 }
 
 validatePackage();
+previewFavicon();

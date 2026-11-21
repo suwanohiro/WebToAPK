@@ -23,6 +23,8 @@
 フォームはPWA対応で、HTTPSで開くとインストール可能になり、フォーム本体はオフラインでも起動できます。
 Personal Access Token や GitHub API の応答は Service Worker のキャッシュ対象外です。Personal Access Token は
 ブラウザに保存しないことを推奨します。
+画像を選択した場合はそれを優先して WebP 圧縮し、Actions 上で Android 用 PNG に変換します。
+選択がない場合はページ内の favicon をActionsで探し、フォームにもプレビューします。取得できない場合は既定アイコンを使います。
 
 ## 必要な設定
 

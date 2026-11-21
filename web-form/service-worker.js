@@ -1,4 +1,4 @@
-const CACHE_NAME = "webtoapk-shell-v1";
+const CACHE_NAME = "webtoapk-shell-v3";
 const APP_ROOT = self.registration.scope;
 const APP_URLS = [
   "./",
